@@ -1,22 +1,23 @@
 package twitter
 
 import (
-	"io"
+	"bytes"
 	"net/http"
 
 	"github.com/dghubble/sling"
 )
 
-// MediaParams
+// MediaParams paremeters for media request
 type MediaParams struct {
-	ImageBase64      string `json:"media"`
-	AdditionalOwners string `json:"additional_owners"`
+	Image            []byte `url:"media,omitempty"`
+	ImageBase64      string `url:"media_data,omitempty"`
+	AdditionalOwners string `url:"additional_owners,omitempty"`
 }
 
-// MediaTweet
+// Media return from twitter
 type Media struct {
-	ID int64 `json:"media_id"`
-	//   ID string `json:"media_id_string"`
+	ID       int64     `json:"media_id"`
+	IDString string    `json:"media_id_string"`
 	Size     int32     `json:"size"`
 	LifeTime int32     `json:"expires_after_secs"`
 	Image    MediaInfo `json:"image"`
@@ -28,32 +29,32 @@ func newMediaService(sling *sling.Sling) *MediaService {
 	}
 }
 
-// infos about the media returned by the twitter API
+// MediaInfo infos about the media returned by the twitter API
 type MediaInfo struct {
 	ImageType string `json:"image_type"`
 	Width     int16  `json:"w"`
 	Height    int16  `json:"h"`
 }
 
-// MediaService
+// MediaService service stance
 type MediaService struct {
 	sling *sling.Sling
 }
 
-// Send image in body to twitter
-// POST https://upload.twitter.com/1.1/media/upload.json
-func (m MediaService) UploadImage(image io.Reader) (*Media, *http.Response, error) {
+// UploadImage POST https://upload.twitter.com/1.1/media/upload.json, only suportting base64
+func (m MediaService) UploadImage(params *MediaParams) (*Media, *http.Response, error) {
 	media := new(Media)
 	apiError := new(APIError)
-	resp, err := m.sling.New().Post("upload.json").Body(image).Receive(media, apiError)
-	return media, resp, relevantError(err, *apiError)
-}
-
-// Send image in base64 to twitter
-// POST https://upload.twitter.com/1.1/media/upload.json
-func (m MediaService) UploadImageBase64(params MediaParams) (*Media, *http.Response, error) {
-	media := new(Media)
-	apiError := new(APIError)
-	resp, err := m.sling.New().Post("upload.json").BodyForm(params).Receive(media, apiError)
+	requestParams := &MediaParams{AdditionalOwners: params.AdditionalOwners}
+	var resp *http.Response
+	var err error
+	if &params.Image != nil && len(params.Image) > 0 {
+		resp, err = m.sling.New().Post("upload.json").Set("media_type", "image/png").Set(
+			"total_bytes", string(len(params.Image))).Body(
+			bytes.NewReader(params.Image)).BodyForm(requestParams).Receive(media, apiError)
+	} else {
+		requestParams.ImageBase64 = params.ImageBase64
+		resp, err = m.sling.New().Post("upload.json").BodyForm(requestParams).Receive(media, apiError)
+	}
 	return media, resp, relevantError(err, *apiError)
 }
